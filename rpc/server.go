@@ -18,9 +18,7 @@ package rpc
 
 import (
 	"context"
-	"errors"
 	"io"
-	"net"
 	"sync"
 	"sync/atomic"
 
@@ -153,8 +151,8 @@ func (s *Server) serveSingleRequest(ctx context.Context, codec ServerCodec) {
 
 	reqs, batch, err := codec.readBatch()
 	if err != nil {
-		if msg := messageForReadError(err); msg != "" {
-			resp := errorMessage(&invalidMessageError{msg})
+		if err != io.EOF {
+			resp := errorMessage(&invalidMessageError{"parse error"})
 			codec.writeJSON(ctx, resp, true)
 		}
 		return
@@ -164,20 +162,6 @@ func (s *Server) serveSingleRequest(ctx context.Context, codec ServerCodec) {
 	} else {
 		h.handleMsg(reqs[0])
 	}
-}
-
-func messageForReadError(err error) string {
-	var netErr net.Error
-	if errors.As(err, &netErr) {
-		if netErr.Timeout() {
-			return "read timeout"
-		} else {
-			return "read error"
-		}
-	} else if err != io.EOF {
-		return "parse error"
-	}
-	return ""
 }
 
 // Stop stops reading new requests, waits for stopPendingRequestTimeout to allow pending

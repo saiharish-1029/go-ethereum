@@ -562,6 +562,12 @@ func (ethash *Ethash) SealHash(header *types.Header) (hash common.Hash) {
 	return hash
 }
 
+// Some weird constants to avoid constant memory allocs for them.
+var (
+	u256_8  = uint256.NewInt(8)
+	u256_32 = uint256.NewInt(32)
+)
+
 // accumulateRewards credits the coinbase of the given block with the mining
 // reward. The total reward consists of the static block reward and rewards for
 // included uncles. The coinbase of each uncle block is also rewarded.
@@ -583,10 +589,10 @@ func accumulateRewards(config *params.ChainConfig, stateDB *state.StateDB, heade
 		r.AddUint64(uNum, 8)
 		r.Sub(r, hNum)
 		r.Mul(r, blockReward)
-		r.Rsh(r, 3)
+		r.Div(r, u256_8)
 		stateDB.AddBalance(uncle.Coinbase, r, tracing.BalanceIncreaseRewardMineUncle)
 
-		r.Rsh(blockReward, 5)
+		r.Div(blockReward, u256_32)
 		reward.Add(reward, r)
 	}
 	stateDB.AddBalance(header.Coinbase, reward, tracing.BalanceIncreaseRewardMineBlock)

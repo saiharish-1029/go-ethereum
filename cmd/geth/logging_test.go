@@ -201,8 +201,9 @@ func TestFileOut(t *testing.T) {
 	var (
 		have, want []byte
 		err        error
-		path       = fmt.Sprintf("%s/test_file_out-%d", t.TempDir(), rand.Int63())
+		path       = fmt.Sprintf("%s/test_file_out-%d", os.TempDir(), rand.Int63())
 	)
+	t.Cleanup(func() { os.Remove(path) })
 	if want, err = runSelf(fmt.Sprintf("--log.file=%s", path), "logtest"); err != nil {
 		t.Fatal(err)
 	}
@@ -221,8 +222,9 @@ func TestRotatingFileOut(t *testing.T) {
 	var (
 		have, want []byte
 		err        error
-		path       = fmt.Sprintf("%s/test_file_out-%d", t.TempDir(), rand.Int63())
+		path       = fmt.Sprintf("%s/test_file_out-%d", os.TempDir(), rand.Int63())
 	)
+	t.Cleanup(func() { os.Remove(path) })
 	if want, err = runSelf(fmt.Sprintf("--log.file=%s", path), "--log.rotate", "logtest"); err != nil {
 		t.Fatal(err)
 	}

@@ -173,24 +173,24 @@ type TestCommitteeChain struct {
 	init     bool
 }
 
-func (tc *TestCommitteeChain) CheckpointInit(bootstrap types.BootstrapData) error {
-	tc.fsp, tc.nsp, tc.init = bootstrap.Header.SyncPeriod(), bootstrap.Header.SyncPeriod()+2, true
+func (t *TestCommitteeChain) CheckpointInit(bootstrap types.BootstrapData) error {
+	t.fsp, t.nsp, t.init = bootstrap.Header.SyncPeriod(), bootstrap.Header.SyncPeriod()+2, true
 	return nil
 }
 
-func (tc *TestCommitteeChain) InsertUpdate(update *types.LightClientUpdate, nextCommittee *types.SerializedSyncCommittee) error {
+func (t *TestCommitteeChain) InsertUpdate(update *types.LightClientUpdate, nextCommittee *types.SerializedSyncCommittee) error {
 	period := update.AttestedHeader.Header.SyncPeriod()
-	if period < tc.fsp || period > tc.nsp || !tc.init {
+	if period < t.fsp || period > t.nsp || !t.init {
 		return light.ErrInvalidPeriod
 	}
-	if period == tc.nsp {
-		tc.nsp++
+	if period == t.nsp {
+		t.nsp++
 	}
 	return nil
 }
 
-func (tc *TestCommitteeChain) NextSyncPeriod() (uint64, bool) {
-	return tc.nsp, tc.init
+func (t *TestCommitteeChain) NextSyncPeriod() (uint64, bool) {
+	return t.nsp, t.init
 }
 
 func (tc *TestCommitteeChain) ExpInit(t *testing.T, ExpInit bool) {
@@ -199,8 +199,8 @@ func (tc *TestCommitteeChain) ExpInit(t *testing.T, ExpInit bool) {
 	}
 }
 
-func (tc *TestCommitteeChain) SetNextSyncPeriod(nsp uint64) {
-	tc.init, tc.nsp = true, nsp
+func (t *TestCommitteeChain) SetNextSyncPeriod(nsp uint64) {
+	t.init, t.nsp = true, nsp
 }
 
 func (tc *TestCommitteeChain) ExpNextSyncPeriod(t *testing.T, expNsp uint64) {

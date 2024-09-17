@@ -19,21 +19,39 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/ethereum/go-ethereum/beacon/blsync"
 	"github.com/ethereum/go-ethereum/cmd/utils"
-	"github.com/ethereum/go-ethereum/internal/debug"
 	"github.com/ethereum/go-ethereum/internal/flags"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/mattn/go-colorable"
+	"github.com/mattn/go-isatty"
 	"github.com/urfave/cli/v2"
+)
+
+var (
+	verbosityFlag = &cli.IntFlag{
+		Name:     "verbosity",
+		Usage:    "Logging verbosity: 0=silent, 1=error, 2=warn, 3=info, 4=debug, 5=detail",
+		Value:    3,
+		Category: flags.LoggingCategory,
+	}
+	vmoduleFlag = &cli.StringFlag{
+		Name:     "vmodule",
+		Usage:    "Per-module verbosity: comma-separated list of <pattern>=<level> (e.g. eth/*=5,p2p=4)",
+		Value:    "",
+		Hidden:   true,
+		Category: flags.LoggingCategory,
+	}
 )
 
 func main() {
 	app := flags.NewApp("beacon light syncer tool")
-	app.Flags = flags.Merge([]cli.Flag{
+	app.Flags = []cli.Flag{
 		utils.BeaconApiFlag,
 		utils.BeaconApiHeaderFlag,
 		utils.BeaconThresholdFlag,
@@ -45,18 +63,11 @@ func main() {
 		//TODO datadir for optional permanent database
 		utils.MainnetFlag,
 		utils.SepoliaFlag,
+		utils.GoerliFlag,
 		utils.BlsyncApiFlag,
 		utils.BlsyncJWTSecretFlag,
-	},
-		debug.Flags,
-	)
-	app.Before = func(ctx *cli.Context) error {
-		flags.MigrateGlobalFlags(ctx)
-		return debug.Setup(ctx)
-	}
-	app.After = func(ctx *cli.Context) error {
-		debug.Exit()
-		return nil
+		verbosityFlag,
+		vmoduleFlag,
 	}
 	app.Action = sync
 
@@ -67,6 +78,14 @@ func main() {
 }
 
 func sync(ctx *cli.Context) error {
+	usecolor := (isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd())) && os.Getenv("TERM") != "dumb"
+	output := io.Writer(os.Stderr)
+	if usecolor {
+		output = colorable.NewColorable(os.Stderr)
+	}
+	verbosity := log.FromLegacyLevel(ctx.Int(verbosityFlag.Name))
+	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(output, verbosity, usecolor)))
+
 	// set up blsync
 	client := blsync.NewClient(ctx)
 	client.SetEngineRPC(makeRPCClient(ctx))

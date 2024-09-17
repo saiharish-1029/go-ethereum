@@ -421,7 +421,7 @@ func (args *TransactionArgs) CallDefaults(globalGasCap uint64, baseFee *big.Int,
 // core evm. This method is used in calls and traces that do not require a real
 // live transaction.
 // Assumes that fields are not nil, i.e. setDefaults or CallDefaults has been called.
-func (args *TransactionArgs) ToMessage(baseFee *big.Int, skipNonceCheck, skipEoACheck bool) *core.Message {
+func (args *TransactionArgs) ToMessage(baseFee *big.Int) *core.Message {
 	var (
 		gasPrice  *big.Int
 		gasFeeCap *big.Int
@@ -452,42 +452,27 @@ func (args *TransactionArgs) ToMessage(baseFee *big.Int, skipNonceCheck, skipEoA
 		accessList = *args.AccessList
 	}
 	return &core.Message{
-		From:             args.from(),
-		To:               args.To,
-		Value:            (*big.Int)(args.Value),
-		Nonce:            uint64(*args.Nonce),
-		GasLimit:         uint64(*args.Gas),
-		GasPrice:         gasPrice,
-		GasFeeCap:        gasFeeCap,
-		GasTipCap:        gasTipCap,
-		Data:             args.data(),
-		AccessList:       accessList,
-		BlobGasFeeCap:    (*big.Int)(args.BlobFeeCap),
-		BlobHashes:       args.BlobHashes,
-		SkipNonceChecks:  skipNonceCheck,
-		SkipFromEOACheck: skipEoACheck,
+		From:              args.from(),
+		To:                args.To,
+		Value:             (*big.Int)(args.Value),
+		GasLimit:          uint64(*args.Gas),
+		GasPrice:          gasPrice,
+		GasFeeCap:         gasFeeCap,
+		GasTipCap:         gasTipCap,
+		Data:              args.data(),
+		AccessList:        accessList,
+		BlobGasFeeCap:     (*big.Int)(args.BlobFeeCap),
+		BlobHashes:        args.BlobHashes,
+		SkipAccountChecks: true,
 	}
 }
 
 // ToTransaction converts the arguments to a transaction.
 // This assumes that setDefaults has been called.
-func (args *TransactionArgs) ToTransaction(defaultType int) *types.Transaction {
-	usedType := types.LegacyTxType
-	switch {
-	case args.BlobHashes != nil || defaultType == types.BlobTxType:
-		usedType = types.BlobTxType
-	case args.MaxFeePerGas != nil || defaultType == types.DynamicFeeTxType:
-		usedType = types.DynamicFeeTxType
-	case args.AccessList != nil || defaultType == types.AccessListTxType:
-		usedType = types.AccessListTxType
-	}
-	// Make it possible to default to newer tx, but use legacy if gasprice is provided
-	if args.GasPrice != nil {
-		usedType = types.LegacyTxType
-	}
+func (args *TransactionArgs) ToTransaction() *types.Transaction {
 	var data types.TxData
-	switch usedType {
-	case types.BlobTxType:
+	switch {
+	case args.BlobHashes != nil:
 		al := types.AccessList{}
 		if args.AccessList != nil {
 			al = *args.AccessList
@@ -513,7 +498,7 @@ func (args *TransactionArgs) ToTransaction(defaultType int) *types.Transaction {
 			}
 		}
 
-	case types.DynamicFeeTxType:
+	case args.MaxFeePerGas != nil:
 		al := types.AccessList{}
 		if args.AccessList != nil {
 			al = *args.AccessList
@@ -530,7 +515,7 @@ func (args *TransactionArgs) ToTransaction(defaultType int) *types.Transaction {
 			AccessList: al,
 		}
 
-	case types.AccessListTxType:
+	case args.AccessList != nil:
 		data = &types.AccessListTx{
 			To:         args.To,
 			ChainID:    (*big.Int)(args.ChainID),

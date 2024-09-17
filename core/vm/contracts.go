@@ -21,7 +21,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"maps"
 	"math/big"
 
 	"github.com/consensys/gnark-crypto/ecc"
@@ -47,12 +46,9 @@ type PrecompiledContract interface {
 	Run(input []byte) ([]byte, error) // Run runs the precompiled contract
 }
 
-// PrecompiledContracts contains the precompiled contracts supported at the given fork.
-type PrecompiledContracts map[common.Address]PrecompiledContract
-
 // PrecompiledContractsHomestead contains the default set of pre-compiled Ethereum
 // contracts used in the Frontier and Homestead releases.
-var PrecompiledContractsHomestead = PrecompiledContracts{
+var PrecompiledContractsHomestead = map[common.Address]PrecompiledContract{
 	common.BytesToAddress([]byte{0x1}): &ecrecover{},
 	common.BytesToAddress([]byte{0x2}): &sha256hash{},
 	common.BytesToAddress([]byte{0x3}): &ripemd160hash{},
@@ -61,7 +57,7 @@ var PrecompiledContractsHomestead = PrecompiledContracts{
 
 // PrecompiledContractsByzantium contains the default set of pre-compiled Ethereum
 // contracts used in the Byzantium release.
-var PrecompiledContractsByzantium = PrecompiledContracts{
+var PrecompiledContractsByzantium = map[common.Address]PrecompiledContract{
 	common.BytesToAddress([]byte{0x1}): &ecrecover{},
 	common.BytesToAddress([]byte{0x2}): &sha256hash{},
 	common.BytesToAddress([]byte{0x3}): &ripemd160hash{},
@@ -74,7 +70,7 @@ var PrecompiledContractsByzantium = PrecompiledContracts{
 
 // PrecompiledContractsIstanbul contains the default set of pre-compiled Ethereum
 // contracts used in the Istanbul release.
-var PrecompiledContractsIstanbul = PrecompiledContracts{
+var PrecompiledContractsIstanbul = map[common.Address]PrecompiledContract{
 	common.BytesToAddress([]byte{0x1}): &ecrecover{},
 	common.BytesToAddress([]byte{0x2}): &sha256hash{},
 	common.BytesToAddress([]byte{0x3}): &ripemd160hash{},
@@ -88,7 +84,7 @@ var PrecompiledContractsIstanbul = PrecompiledContracts{
 
 // PrecompiledContractsBerlin contains the default set of pre-compiled Ethereum
 // contracts used in the Berlin release.
-var PrecompiledContractsBerlin = PrecompiledContracts{
+var PrecompiledContractsBerlin = map[common.Address]PrecompiledContract{
 	common.BytesToAddress([]byte{0x1}): &ecrecover{},
 	common.BytesToAddress([]byte{0x2}): &sha256hash{},
 	common.BytesToAddress([]byte{0x3}): &ripemd160hash{},
@@ -102,7 +98,7 @@ var PrecompiledContractsBerlin = PrecompiledContracts{
 
 // PrecompiledContractsCancun contains the default set of pre-compiled Ethereum
 // contracts used in the Cancun release.
-var PrecompiledContractsCancun = PrecompiledContracts{
+var PrecompiledContractsCancun = map[common.Address]PrecompiledContract{
 	common.BytesToAddress([]byte{0x1}): &ecrecover{},
 	common.BytesToAddress([]byte{0x2}): &sha256hash{},
 	common.BytesToAddress([]byte{0x3}): &ripemd160hash{},
@@ -117,7 +113,7 @@ var PrecompiledContractsCancun = PrecompiledContracts{
 
 // PrecompiledContractsPrague contains the set of pre-compiled Ethereum
 // contracts used in the Prague release.
-var PrecompiledContractsPrague = PrecompiledContracts{
+var PrecompiledContractsPrague = map[common.Address]PrecompiledContract{
 	common.BytesToAddress([]byte{0x01}): &ecrecover{},
 	common.BytesToAddress([]byte{0x02}): &sha256hash{},
 	common.BytesToAddress([]byte{0x03}): &ripemd160hash{},
@@ -140,8 +136,6 @@ var PrecompiledContractsPrague = PrecompiledContracts{
 }
 
 var PrecompiledContractsBLS = PrecompiledContractsPrague
-
-var PrecompiledContractsVerkle = PrecompiledContractsPrague
 
 var (
 	PrecompiledAddressesPrague    []common.Address
@@ -173,31 +167,7 @@ func init() {
 	}
 }
 
-func activePrecompiledContracts(rules params.Rules) PrecompiledContracts {
-	switch {
-	case rules.IsVerkle:
-		return PrecompiledContractsVerkle
-	case rules.IsPrague:
-		return PrecompiledContractsPrague
-	case rules.IsCancun:
-		return PrecompiledContractsCancun
-	case rules.IsBerlin:
-		return PrecompiledContractsBerlin
-	case rules.IsIstanbul:
-		return PrecompiledContractsIstanbul
-	case rules.IsByzantium:
-		return PrecompiledContractsByzantium
-	default:
-		return PrecompiledContractsHomestead
-	}
-}
-
-// ActivePrecompiledContracts returns a copy of precompiled contracts enabled with the current configuration.
-func ActivePrecompiledContracts(rules params.Rules) PrecompiledContracts {
-	return maps.Clone(activePrecompiledContracts(rules))
-}
-
-// ActivePrecompiles returns the precompile addresses enabled with the current configuration.
+// ActivePrecompiles returns the precompiles enabled with the current configuration.
 func ActivePrecompiles(rules params.Rules) []common.Address {
 	switch {
 	case rules.IsPrague:
@@ -324,7 +294,10 @@ type bigModExp struct {
 var (
 	big1      = big.NewInt(1)
 	big3      = big.NewInt(3)
+	big4      = big.NewInt(4)
 	big7      = big.NewInt(7)
+	big8      = big.NewInt(8)
+	big16     = big.NewInt(16)
 	big20     = big.NewInt(20)
 	big32     = big.NewInt(32)
 	big64     = big.NewInt(64)
@@ -350,13 +323,13 @@ func modexpMultComplexity(x *big.Int) *big.Int {
 	case x.Cmp(big1024) <= 0:
 		// (x ** 2 // 4 ) + ( 96 * x - 3072)
 		x = new(big.Int).Add(
-			new(big.Int).Rsh(new(big.Int).Mul(x, x), 2),
+			new(big.Int).Div(new(big.Int).Mul(x, x), big4),
 			new(big.Int).Sub(new(big.Int).Mul(big96, x), big3072),
 		)
 	default:
 		// (x ** 2 // 16) + (480 * x - 199680)
 		x = new(big.Int).Add(
-			new(big.Int).Rsh(new(big.Int).Mul(x, x), 4),
+			new(big.Int).Div(new(big.Int).Mul(x, x), big16),
 			new(big.Int).Sub(new(big.Int).Mul(big480, x), big199680),
 		)
 	}
@@ -394,7 +367,7 @@ func (c *bigModExp) RequiredGas(input []byte) uint64 {
 	adjExpLen := new(big.Int)
 	if expLen.Cmp(big32) > 0 {
 		adjExpLen.Sub(expLen, big32)
-		adjExpLen.Lsh(adjExpLen, 3)
+		adjExpLen.Mul(big8, adjExpLen)
 	}
 	adjExpLen.Add(adjExpLen, big.NewInt(int64(msb)))
 	// Calculate the gas cost of the operation
@@ -408,8 +381,8 @@ func (c *bigModExp) RequiredGas(input []byte) uint64 {
 		//    ceiling(x/8)^2
 		//
 		//where is x is max(length_of_MODULUS, length_of_BASE)
-		gas.Add(gas, big7)
-		gas.Rsh(gas, 3)
+		gas = gas.Add(gas, big7)
+		gas = gas.Div(gas, big8)
 		gas.Mul(gas, gas)
 
 		gas.Mul(gas, math.BigMax(adjExpLen, big1))

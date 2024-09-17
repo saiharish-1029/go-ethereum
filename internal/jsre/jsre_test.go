@@ -51,8 +51,6 @@ func newWithTestJS(t *testing.T, testjs string) *JSRE {
 }
 
 func TestExec(t *testing.T) {
-	t.Parallel()
-
 	jsre := newWithTestJS(t, `msg = "testMsg"`)
 
 	err := jsre.Exec("test.js")
@@ -75,8 +73,6 @@ func TestExec(t *testing.T) {
 }
 
 func TestNatto(t *testing.T) {
-	t.Parallel()
-
 	jsre := newWithTestJS(t, `setTimeout(function(){msg = "testMsg"}, 1);`)
 
 	err := jsre.Exec("test.js")
@@ -100,8 +96,6 @@ func TestNatto(t *testing.T) {
 }
 
 func TestBind(t *testing.T) {
-	t.Parallel()
-
 	jsre := New("", os.Stdout)
 	defer jsre.Stop(false)
 
@@ -114,8 +108,6 @@ func TestBind(t *testing.T) {
 }
 
 func TestLoadScript(t *testing.T) {
-	t.Parallel()
-
 	jsre := newWithTestJS(t, `msg = "testMsg"`)
 
 	_, err := jsre.Run(`loadScript("test.js")`)

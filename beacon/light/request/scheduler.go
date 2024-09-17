@@ -151,7 +151,6 @@ func (s *Scheduler) RegisterTarget(t targetData) {
 func (s *Scheduler) RegisterModule(m Module, name string) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-
 	s.modules = append(s.modules, m)
 	s.names[m] = name
 }

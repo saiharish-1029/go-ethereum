@@ -556,11 +556,11 @@ func (s Transactions) EncodeIndex(i int, w *bytes.Buffer) {
 	}
 }
 
-// TxDifference returns a new set of transactions that are present in a but not in b.
+// TxDifference returns a new set which is the difference between a and b.
 func TxDifference(a, b Transactions) Transactions {
 	keep := make(Transactions, 0, len(a))
 
-	remove := make(map[common.Hash]struct{}, b.Len())
+	remove := make(map[common.Hash]struct{})
 	for _, tx := range b {
 		remove[tx.Hash()] = struct{}{}
 	}
@@ -574,7 +574,7 @@ func TxDifference(a, b Transactions) Transactions {
 	return keep
 }
 
-// HashDifference returns a new set of hashes that are present in a but not in b.
+// HashDifference returns a new set which is the difference between a and b.
 func HashDifference(a, b []common.Hash) []common.Hash {
 	keep := make([]common.Hash, 0, len(a))
 

@@ -67,6 +67,7 @@ var (
 	errCancelContentProcessing = errors.New("content processing canceled (requested)")
 	errCanceled                = errors.New("syncing canceled (requested)")
 	errNoPivotHeader           = errors.New("pivot header is not found")
+	ErrMergeTransition         = errors.New("legacy sync reached the merge")
 )
 
 // peerDropFn is a callback type for dropping a peer detected as malicious.
@@ -97,6 +98,7 @@ type Downloader struct {
 	syncStatsChainHeight uint64       // Highest block number known when syncing started
 	syncStatsLock        sync.RWMutex // Lock protecting the sync stats fields
 
+	lightchain LightChain
 	blockchain BlockChain
 
 	// Callbacks
@@ -141,8 +143,8 @@ type Downloader struct {
 	syncLogTime    time.Time // Time instance when status was last reported
 }
 
-// BlockChain encapsulates functions required to sync a (full or snap) blockchain.
-type BlockChain interface {
+// LightChain encapsulates functions required to synchronise a light chain.
+type LightChain interface {
 	// HasHeader verifies a header's presence in the local chain.
 	HasHeader(common.Hash, uint64) bool
 
@@ -160,6 +162,11 @@ type BlockChain interface {
 
 	// SetHead rewinds the local chain to a new head.
 	SetHead(uint64) error
+}
+
+// BlockChain encapsulates functions required to sync a (full or snap) blockchain.
+type BlockChain interface {
+	LightChain
 
 	// HasBlock verifies a block's presence in the local chain.
 	HasBlock(common.Hash, uint64) bool
@@ -194,13 +201,17 @@ type BlockChain interface {
 }
 
 // New creates a new downloader to fetch hashes and blocks from remote peers.
-func New(stateDb ethdb.Database, mux *event.TypeMux, chain BlockChain, dropPeer peerDropFn, success func()) *Downloader {
+func New(stateDb ethdb.Database, mux *event.TypeMux, chain BlockChain, lightchain LightChain, dropPeer peerDropFn, success func()) *Downloader {
+	if lightchain == nil {
+		lightchain = chain
+	}
 	dl := &Downloader{
 		stateDB:        stateDb,
 		mux:            mux,
 		queue:          newQueue(blockCacheMaxItems, blockCacheInitialItems),
 		peers:          newPeerSet(),
 		blockchain:     chain,
+		lightchain:     lightchain,
 		dropPeer:       dropPeer,
 		headerProcCh:   make(chan *headerTask, 1),
 		quitCh:         make(chan struct{}),
@@ -229,13 +240,15 @@ func (d *Downloader) Progress() ethereum.SyncProgress {
 
 	current := uint64(0)
 	mode := d.getMode()
-	switch mode {
-	case FullSync:
+	switch {
+	case d.blockchain != nil && mode == FullSync:
 		current = d.blockchain.CurrentBlock().Number.Uint64()
-	case SnapSync:
+	case d.blockchain != nil && mode == SnapSync:
 		current = d.blockchain.CurrentSnapBlock().Number.Uint64()
+	case d.lightchain != nil:
+		current = d.lightchain.CurrentHeader().Number.Uint64()
 	default:
-		log.Error("Unknown downloader mode", "mode", mode)
+		log.Error("Unknown downloader chain/mode combo", "light", d.lightchain != nil, "full", d.blockchain != nil, "mode", mode)
 	}
 	progress, pending := d.SnapSyncer.Progress()
 
@@ -389,7 +402,7 @@ func (d *Downloader) syncToHead() (err error) {
 		if err != nil {
 			d.mux.Post(FailedEvent{err})
 		} else {
-			latest := d.blockchain.CurrentHeader()
+			latest := d.lightchain.CurrentHeader()
 			d.mux.Post(DoneEvent{latest})
 		}
 	}()
@@ -507,7 +520,7 @@ func (d *Downloader) syncToHead() (err error) {
 		}
 		// Rewind the ancient store and blockchain if reorg happens.
 		if origin+1 < frozen {
-			if err := d.blockchain.SetHead(origin); err != nil {
+			if err := d.lightchain.SetHead(origin); err != nil {
 				return err
 			}
 			log.Info("Truncated excess ancient chain segment", "oldhead", frozen-1, "newhead", origin)
@@ -677,32 +690,34 @@ func (d *Downloader) processHeaders(origin uint64) error {
 				chunkHashes := hashes[:limit]
 
 				// In case of header only syncing, validate the chunk immediately
-				if mode == SnapSync {
+				if mode == SnapSync || mode == LightSync {
 					// Although the received headers might be all valid, a legacy
 					// PoW/PoA sync must not accept post-merge headers. Make sure
 					// that any transition is rejected at this point.
 					if len(chunkHeaders) > 0 {
-						if n, err := d.blockchain.InsertHeaderChain(chunkHeaders); err != nil {
+						if n, err := d.lightchain.InsertHeaderChain(chunkHeaders); err != nil {
 							log.Warn("Invalid header encountered", "number", chunkHeaders[n].Number, "hash", chunkHashes[n], "parent", chunkHeaders[n].ParentHash, "err", err)
 							return fmt.Errorf("%w: %v", errInvalidChain, err)
 						}
 					}
 				}
-				// If we've reached the allowed number of pending headers, stall a bit
-				for d.queue.PendingBodies() >= maxQueuedHeaders || d.queue.PendingReceipts() >= maxQueuedHeaders {
-					timer.Reset(time.Second)
-					select {
-					case <-d.cancelCh:
-						return errCanceled
-					case <-timer.C:
+				// Unless we're doing light chains, schedule the headers for associated content retrieval
+				if mode == FullSync || mode == SnapSync {
+					// If we've reached the allowed number of pending headers, stall a bit
+					for d.queue.PendingBodies() >= maxQueuedHeaders || d.queue.PendingReceipts() >= maxQueuedHeaders {
+						timer.Reset(time.Second)
+						select {
+						case <-d.cancelCh:
+							return errCanceled
+						case <-timer.C:
+						}
+					}
+					// Otherwise insert the headers for content retrieval
+					inserts := d.queue.Schedule(chunkHeaders, chunkHashes, origin)
+					if len(inserts) != len(chunkHeaders) {
+						return fmt.Errorf("%w: stale headers", errBadPeer)
 					}
 				}
-				// Otherwise insert the headers for content retrieval
-				inserts := d.queue.Schedule(chunkHeaders, chunkHashes, origin)
-				if len(inserts) != len(chunkHeaders) {
-					return fmt.Errorf("%w: stale headers", errBadPeer)
-				}
-
 				headers = headers[limit:]
 				hashes = hashes[limit:]
 				origin += uint64(limit)
@@ -1041,7 +1056,7 @@ func (d *Downloader) readHeaderRange(last *types.Header, count int) []*types.Hea
 		headers []*types.Header
 	)
 	for {
-		parent := d.blockchain.GetHeaderByHash(current.ParentHash)
+		parent := d.lightchain.GetHeaderByHash(current.ParentHash)
 		if parent == nil {
 			break // The chain is not continuous, or the chain is exhausted
 		}

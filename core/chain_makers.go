@@ -32,7 +32,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/triedb"
-	"github.com/ethereum/go-verkle"
+	"github.com/gballet/go-verkle"
 	"github.com/holiman/uint256"
 )
 
@@ -346,18 +346,7 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 			gen(i, b)
 		}
 
-		var requests types.Requests
-		if config.IsPrague(b.header.Number, b.header.Time) {
-			for _, r := range b.receipts {
-				d, err := ParseDepositLogs(r.Logs, config)
-				if err != nil {
-					panic(fmt.Sprintf("failed to parse deposit log: %v", err))
-				}
-				requests = append(requests, d...)
-			}
-		}
-
-		body := types.Body{Transactions: b.txs, Uncles: b.uncles, Withdrawals: b.withdrawals, Requests: requests}
+		body := types.Body{Transactions: b.txs, Uncles: b.uncles, Withdrawals: b.withdrawals}
 		block, err := b.engine.FinalizeAndAssemble(cm, b.header, statedb, &body, b.receipts)
 		if err != nil {
 			panic(err)
@@ -379,7 +368,7 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 	defer triedb.Close()
 
 	for i := 0; i < n; i++ {
-		statedb, err := state.New(parent.Root(), state.NewDatabase(triedb, nil))
+		statedb, err := state.New(parent.Root(), state.NewDatabaseWithNodeDB(db, triedb), nil)
 		if err != nil {
 			panic(err)
 		}
@@ -478,14 +467,15 @@ func GenerateVerkleChain(config *params.ChainConfig, parent *types.Block, engine
 			panic(fmt.Sprintf("trie write error: %v", err))
 		}
 
-		proofs = append(proofs, block.ExecutionWitness().VerkleProof)
-		keyvals = append(keyvals, block.ExecutionWitness().StateDiff)
+		// TODO uncomment when proof generation is merged
+		// proofs = append(proofs, block.ExecutionWitness().VerkleProof)
+		// keyvals = append(keyvals, block.ExecutionWitness().StateDiff)
 
 		return block, b.receipts
 	}
 
 	for i := 0; i < n; i++ {
-		statedb, err := state.New(parent.Root(), state.NewDatabase(trdb, nil))
+		statedb, err := state.New(parent.Root(), state.NewDatabaseWithNodeDB(db, trdb), nil)
 		if err != nil {
 			panic(err)
 		}

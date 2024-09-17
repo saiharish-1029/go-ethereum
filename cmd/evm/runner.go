@@ -155,13 +155,14 @@ func runCmd(ctx *cli.Context) error {
 	})
 	defer triedb.Close()
 	genesis := genesisConfig.MustCommit(db, triedb)
-	sdb := state.NewDatabase(triedb, nil)
-	statedb, _ = state.New(genesis.Root(), sdb)
+	sdb := state.NewDatabaseWithNodeDB(db, triedb)
+	statedb, _ = state.New(genesis.Root(), sdb, nil)
 	chainConfig = genesisConfig.Config
 
 	if ctx.String(SenderFlag.Name) != "" {
 		sender = common.HexToAddress(ctx.String(SenderFlag.Name))
 	}
+	statedb.CreateAccount(sender)
 
 	if ctx.String(ReceiverFlag.Name) != "" {
 		receiver = common.HexToAddress(ctx.String(ReceiverFlag.Name))
@@ -221,7 +222,6 @@ func runCmd(ctx *cli.Context) error {
 		Time:        genesisConfig.Timestamp,
 		Coinbase:    genesisConfig.Coinbase,
 		BlockNumber: new(big.Int).SetUint64(genesisConfig.Number),
-		BaseFee:     genesisConfig.BaseFee,
 		BlobHashes:  blobHashes,
 		BlobBaseFee: blobBaseFee,
 		EVMConfig: vm.Config{
@@ -277,7 +277,7 @@ func runCmd(ctx *cli.Context) error {
 			fmt.Printf("Failed to commit changes %v\n", err)
 			return err
 		}
-		dumpdb, err := state.New(root, sdb)
+		dumpdb, err := state.New(root, sdb, nil)
 		if err != nil {
 			fmt.Printf("Failed to open statedb %v\n", err)
 			return err

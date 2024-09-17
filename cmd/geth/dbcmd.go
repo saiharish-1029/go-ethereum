@@ -248,8 +248,7 @@ func removeDB(ctx *cli.Context) error {
 	// Delete state data
 	statePaths := []string{
 		rootDir,
-		filepath.Join(ancientDir, rawdb.MerkleStateFreezerName),
-		filepath.Join(ancientDir, rawdb.VerkleStateFreezerName),
+		filepath.Join(ancientDir, rawdb.StateFreezerName),
 	}
 	confirmAndRemoveDB(statePaths, "state data", ctx, removeStateDataFlag.Name)
 
@@ -408,13 +407,17 @@ func checkStateContent(ctx *cli.Context) error {
 	return nil
 }
 
-func showDBStats(db ethdb.KeyValueStater) {
-	stats, err := db.Stat()
-	if err != nil {
+func showLeveldbStats(db ethdb.KeyValueStater) {
+	if stats, err := db.Stat("leveldb.stats"); err != nil {
 		log.Warn("Failed to read database stats", "error", err)
-		return
+	} else {
+		fmt.Println(stats)
 	}
-	fmt.Println(stats)
+	if ioStats, err := db.Stat("leveldb.iostats"); err != nil {
+		log.Warn("Failed to read database iostats", "error", err)
+	} else {
+		fmt.Println(ioStats)
+	}
 }
 
 func dbStats(ctx *cli.Context) error {
@@ -424,7 +427,7 @@ func dbStats(ctx *cli.Context) error {
 	db := utils.MakeChainDatabase(ctx, stack, true)
 	defer db.Close()
 
-	showDBStats(db)
+	showLeveldbStats(db)
 	return nil
 }
 
@@ -436,7 +439,7 @@ func dbCompact(ctx *cli.Context) error {
 	defer db.Close()
 
 	log.Info("Stats before compaction")
-	showDBStats(db)
+	showLeveldbStats(db)
 
 	log.Info("Triggering compaction")
 	if err := db.Compact(nil, nil); err != nil {
@@ -444,7 +447,7 @@ func dbCompact(ctx *cli.Context) error {
 		return err
 	}
 	log.Info("Stats after compaction")
-	showDBStats(db)
+	showLeveldbStats(db)
 	return nil
 }
 

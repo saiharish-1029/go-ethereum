@@ -62,7 +62,6 @@ func (ui *CommandlineUI) readString() string {
 
 func (ui *CommandlineUI) OnInputRequired(info UserInputRequest) (UserInputResponse, error) {
 	fmt.Printf("## %s\n\n%s\n", info.Title, info.Prompt)
-	defer fmt.Println("-----------------------")
 	if info.IsPassword {
 		text, err := prompt.Stdin.PromptPassword("> ")
 		if err != nil {
@@ -81,7 +80,6 @@ func (ui *CommandlineUI) confirm() bool {
 	if ui.readString() == "y" {
 		return true
 	}
-	fmt.Println("-----------------------")
 	return false
 }
 

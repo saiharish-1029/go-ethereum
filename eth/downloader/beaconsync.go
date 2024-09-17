@@ -123,8 +123,7 @@ func (b *beaconBackfiller) resume() {
 func (b *beaconBackfiller) setMode(mode SyncMode) {
 	// Update the old sync mode and track if it was changed
 	b.lock.Lock()
-	oldMode := b.syncMode
-	updated := oldMode != mode
+	updated := b.syncMode != mode
 	filling := b.filling
 	b.syncMode = mode
 	b.lock.Unlock()
@@ -134,7 +133,7 @@ func (b *beaconBackfiller) setMode(mode SyncMode) {
 	if !updated || !filling {
 		return
 	}
-	log.Error("Downloader sync mode changed mid-run", "old", oldMode.String(), "new", mode.String())
+	log.Error("Downloader sync mode changed mid-run", "old", mode.String(), "new", mode.String())
 	b.suspend()
 	b.resume()
 }
@@ -203,7 +202,7 @@ func (d *Downloader) findBeaconAncestor() (uint64, error) {
 	case SnapSync:
 		chainHead = d.blockchain.CurrentSnapBlock()
 	default:
-		panic("unknown sync mode")
+		chainHead = d.lightchain.CurrentHeader()
 	}
 	number := chainHead.Number.Uint64()
 
@@ -223,7 +222,7 @@ func (d *Downloader) findBeaconAncestor() (uint64, error) {
 	case SnapSync:
 		linked = d.blockchain.HasFastBlock(beaconTail.ParentHash, beaconTail.Number.Uint64()-1)
 	default:
-		panic("unknown sync mode")
+		linked = d.blockchain.HasHeader(beaconTail.ParentHash, beaconTail.Number.Uint64()-1)
 	}
 	if !linked {
 		// This is a programming error. The chain backfiller was called with a
@@ -258,7 +257,7 @@ func (d *Downloader) findBeaconAncestor() (uint64, error) {
 		case SnapSync:
 			known = d.blockchain.HasFastBlock(h.Hash(), n)
 		default:
-			panic("unknown sync mode")
+			known = d.lightchain.HasHeader(h.Hash(), n)
 		}
 		if !known {
 			end = check
